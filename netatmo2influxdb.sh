@@ -92,11 +92,15 @@ do
 	refresh_token
 	status=$( curl -s -H "Authorization: Bearer $access_token" https://api.netatmo.net/api/homestatus?home_id=$home_id )
 	echo $status > /tmp/status
-	temp=$( echo $status | jq ".body.home.rooms[0].therm_measured_temperature" )
-	consigne=$( echo $status | jq ".body.home.rooms[0].therm_setpoint_temperature" )
-	log "`date`: therm_measured_temperature: $temp"
-	send_influx therm_measured_temperature $temp
-	log "`date`: therm_setpoint_temperature: $consigne"
-	send_influx therm_setpoint_temperature $consigne
+	nb_rooms=$( echo $status | jq -r '.body.home.rooms' | jq length )
+	for i in $( seq 0 $(( $nb_rooms - 1 )) )
+	do
+		temp=$( echo $status | jq ".body.home.rooms[$i].therm_measured_temperature" )
+		consigne=$( echo $status | jq ".body.home.rooms[$i].therm_setpoint_temperature" )
+		log "`date`: therm_measured_temperature_$i: $temp"
+		send_influx therm_measured_temperature_$i $temp
+		log "`date`: therm_setpoint_temperature_$i: $consigne"
+		send_influx therm_setpoint_temperature_$i $consigne
+	done
 	sleep 30
 done
