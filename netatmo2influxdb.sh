@@ -19,7 +19,7 @@ log()
 
 send_influx()
 {
-	data="$1 value=$2"
+	data="$1,room=$3 value=$2"
 	log "Send to influx : $data"
 	curl -s -u $influxdb_user:$influxdb_password -XPOST "$influxdb_url/write?db=$influxdb_database" --data-binary "$data"
 	if [ "$?" != "0" ]
@@ -90,6 +90,7 @@ log "Utilisation de home_id = $home_id"
 while `true`
 do
 	refresh_token
+	curl -s -H "Authorization: Bearer $access_token" https://api.netatmo.net/api/homesdata?home_id=$home_id > /tmp/homedata 
 	status=$( curl -s -H "Authorization: Bearer $access_token" https://api.netatmo.net/api/homestatus?home_id=$home_id )
 	echo $status > /tmp/status
 	nb_rooms=$( echo $status | jq -r '.body.home.rooms' | jq length )
@@ -97,10 +98,15 @@ do
 	do
 		temp=$( echo $status | jq ".body.home.rooms[$i].therm_measured_temperature" )
 		consigne=$( echo $status | jq ".body.home.rooms[$i].therm_setpoint_temperature" )
-		log "`date`: therm_measured_temperature_$i: $temp"
-		send_influx therm_measured_temperature_$i $temp
-		log "`date`: therm_setpoint_temperature_$i: $consigne"
-		send_influx therm_setpoint_temperature_$i $consigne
+		roomid=$( echo $status | jq ".body.home.rooms[$i].id" )
+		roomname=$( cat /tmp/homedata | jq "(.body.homes[0].rooms[] | select( .id | contains($roomid))).name" )
+		roomname=$( echo $roomname | sed 's/"/_/g' )
+		roomname=$( echo $roomname | sed "s/'/_/g" )
+		roomname=$( echo $roomname | sed 's/ /_/g' )
+		log "`date`: $roomname therm_measured_temperature_$i: $temp"
+		send_influx therm_measured_temperature $temp $roomname
+		log "`date`: $roomname therm_setpoint_temperature_$i: $consigne"
+		send_influx therm_setpoint_temperature $consigne $roomname
 	done
 	sleep 30
 done
